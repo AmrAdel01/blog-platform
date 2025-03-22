@@ -4,7 +4,8 @@ const blogModel = require("./../models/blogModel");
 const slugify = require("slugify");
 
 exports.addNewBlog = asyncHandler(async (req, res, next) => {
-  const { title, content, image, category, createdAt } = req.body;
+  const { title, content, image, category } = req.body;
+  const userId = req.user._id;
   const blogExist = await blogModel.findOne({
     title,
     content,
@@ -21,6 +22,7 @@ exports.addNewBlog = asyncHandler(async (req, res, next) => {
     content,
     image,
     category,
+    user: userId,
   });
   res.status(201).json({
     message: "Blog added successfully",
@@ -29,20 +31,31 @@ exports.addNewBlog = asyncHandler(async (req, res, next) => {
 });
 
 exports.getBlogs = asyncHandler(async (req, res, next) => {
-  const blogs = await blogModel.find({});
+  let { search } = req.query;
+  const userId = req.user._id;
+  const query = { user: userId };
+  if (search) {
+    query.$text = { $search: search }; // Requires text index on fields like title/content
+  }
+  const blogs = await blogModel.find(query);
   if (!blogs) {
     return next(new ApiError("No blogs found", 404));
   }
+  const totalTasks = await blogModel.countDocuments(query);
+
   res.json({
     message: "Blogs fetched successfully",
     results: blogs.length,
     blogs,
+    total: totalTasks,
+    userId,
   });
 });
 
 exports.getBlogById = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
   const { id } = req.params;
-  const blog = await blogModel.findById(id);
+  const blog = await blogModel.findOne({ _id: id, user: userId });
   if (!blog) {
     return next(new ApiError(`Blog not found with this id : ${id}`, 404));
   }
@@ -53,11 +66,16 @@ exports.getBlogById = asyncHandler(async (req, res, next) => {
 });
 
 exports.updateBlog = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
   const { id } = req.params;
-  const blog = await blogModel.findByIdAndUpdate(id, req.body, {
-    new: true,
-    runValidators: true,
-  });
+  const { title, content, image, category } = req.body;
+
+  const blog = await blogModel.findOneAndUpdate(
+    { _id: id, user: userId },
+    { title, content, image, category },
+    { new: true }
+  );
+
   if (!blog) {
     return next(new ApiError(`Blog not found with this id : ${id}`, 404));
   }
@@ -68,9 +86,12 @@ exports.updateBlog = asyncHandler(async (req, res, next) => {
 });
 
 exports.deleteBlog = asyncHandler(async (req, res, next) => {
-  const { id } = req.params;
-  const blog = await blogModel.findByIdAndDelete(id);
-  if (!blog) {
+  const userId = req.user._id;
+  const deleteBlog = await blogModel.findOneAndDelete({
+    _id: req.params.id,
+    user: userId,
+  });
+  if (!deleteBlog) {
     return next(new ApiError(`Blog not found with this id : ${id}`, 404));
   }
   res.status(200).json({
