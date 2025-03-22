@@ -45,6 +45,8 @@ blogSchema.pre("save", function (next) {
 
 blogSchema.index({
   title: "text",
+  content: "text",
+  category: "text",
 });
 
 const blogModel = mongoose.model("Blog", blogSchema);

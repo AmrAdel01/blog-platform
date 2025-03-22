@@ -31,23 +31,27 @@ exports.addNewBlog = asyncHandler(async (req, res, next) => {
 });
 
 exports.getBlogs = asyncHandler(async (req, res, next) => {
-  let { search } = req.query;
+  let { search, page, skip, limit } = req.query;
   const userId = req.user._id;
   const query = { user: userId };
+
+  page = parseInt(page, 10) * 1 || 1;
+  limit = parseInt(limit, 10) * 1 || 10;
+  skip = (page - 1) * limit;
+
   if (search) {
-    query.$text = { $search: search }; // Requires text index on fields like title/content
+    query.$text = { $search: search };
   }
-  const blogs = await blogModel.find(query);
+  const blogs = await blogModel.find(query).skip(skip).limit(limit);
   if (!blogs) {
     return next(new ApiError("No blogs found", 404));
   }
-  const totalTasks = await blogModel.countDocuments(query);
-
   res.json({
     message: "Blogs fetched successfully",
     results: blogs.length,
+    page,
+    limit,
     blogs,
-    total: totalTasks,
     userId,
   });
 });
